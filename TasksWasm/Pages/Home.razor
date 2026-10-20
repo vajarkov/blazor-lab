@@ -1,7 +1,248 @@
 ﻿@page "/"
+@using System.Net.Http.Json
+@using TasksWasm.Models
+@inject HttpClient Http
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Задачи</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Список задач</h1>
 
-Welcome to your new app.
+@if (errorMessage is not null)
+{
+    <div class="alert alert-danger" role="alert">
+        @errorMessage
+    </div>
+}
+
+@if (validationMessage is not null)
+{
+    <div class="alert alert-warning" role="alert">
+        @validationMessage
+    </div>
+}
+
+<form @onsubmit="AddTaskAsync" @onsubmit:preventDefault>
+    <div class="d-flex gap-2 mb-3">
+        <input class="form-control"
+               placeholder="Название новой задачи"
+               @bind="newTaskTitle"
+               disabled="@isAdding" />
+
+        <button type="submit"
+                class="btn btn-primary"
+                disabled="@isAdding">
+            @(isAdding ? "Добавление..." : "Добавить")
+        </button>
+    </div>
+</form>
+
+@if (isLoading)
+{
+    <p>Загрузка задач...</p>
+}
+else if (tasks.Count == 0)
+{
+    <p>Задач пока нет.</p>
+}
+else
+{
+    <ul class="list-group">
+        @foreach (var task in tasks)
+        {
+            <li @key="task.Id"
+                class="list-group-item d-flex align-items-center gap-2">
+
+                <input type="checkbox"
+                       class="form-check-input mt-0"
+                       checked="@task.IsCompleted"
+                       disabled="@IsBusy(task.Id)"
+                       @onchange="() => ToggleTaskAsync(task)" />
+
+                <span class="flex-grow-1"
+                      style="@(task.IsCompleted
+                          ? "text-decoration: line-through"
+                          : "")">
+                    @task.Title
+                </span>
+
+                <button type="button"
+                        class="btn btn-outline-danger btn-sm"
+                        disabled="@IsBusy(task.Id)"
+                        @onclick="() => DeleteTaskAsync(task.Id)">
+                    @(IsBusy(task.Id) ? "..." : "Удалить")
+                </button>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private List<TaskItem> tasks = [];
+    private string newTaskTitle = string.Empty;
+    private bool isLoading = true;
+    private bool isAdding;
+    private string? errorMessage;
+    private string? validationMessage;
+    private readonly HashSet<int> busyTaskIds = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasksAsync();
+    }
+
+    private async Task LoadTasksAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            tasks = await Http.GetFromJsonAsync<List<TaskItem>>("api/tasks")
+                ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Не удалось загрузить задачи: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task AddTaskAsync()
+    {
+        if (isAdding)
+        {
+            return;
+        }
+
+        validationMessage = null;
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(newTaskTitle))
+        {
+            validationMessage = "Введите название задачи.";
+            return;
+        }
+
+        isAdding = true;
+
+        try
+        {
+            using var response = await Http.PostAsJsonAsync(
+                "api/tasks",
+                new CreateTaskRequest(newTaskTitle.Trim()));
+
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"Не удалось добавить задачу. Код: {(int)response.StatusCode}.";
+                return;
+            }
+
+            var createdTask =
+                await response.Content.ReadFromJsonAsync<TaskItem>();
+
+            if (createdTask is not null)
+            {
+                tasks.Add(createdTask);
+                newTaskTitle = string.Empty;
+            }
+            else
+            {
+                await LoadTasksAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка при добавлении задачи: {ex.Message}";
+        }
+        finally
+        {
+            isAdding = false;
+        }
+    }
+
+    private async Task ToggleTaskAsync(TaskItem task)
+    {
+        if (!busyTaskIds.Add(task.Id))
+        {
+            return;
+        }
+
+        errorMessage = null;
+
+        try
+        {
+            using var response = await Http.PutAsync(
+                $"api/tasks/{task.Id}/toggle",
+                content: null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = response.StatusCode ==
+                    System.Net.HttpStatusCode.NotFound
+                    ? "Задача не найдена на сервере."
+                    : $"Не удалось изменить статус. Код: {(int)response.StatusCode}.";
+                return;
+            }
+
+            var result =
+                await response.Content.ReadFromJsonAsync<ToggleTaskResponse>();
+
+            if (result is not null)
+            {
+                task.IsCompleted = result.IsCompleted;
+            }
+            else
+            {
+                await LoadTasksAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка при изменении статуса: {ex.Message}";
+        }
+        finally
+        {
+            busyTaskIds.Remove(task.Id);
+        }
+    }
+
+    private async Task DeleteTaskAsync(int id)
+    {
+        if (!busyTaskIds.Add(id))
+        {
+            return;
+        }
+
+        errorMessage = null;
+
+        try
+        {
+            using var response = await Http.DeleteAsync($"api/tasks/{id}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"Не удалось удалить задачу. Код: {(int)response.StatusCode}.";
+                return;
+            }
+
+            tasks.RemoveAll(task => task.Id == id);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка при удалении задачи: {ex.Message}";
+        }
+        finally
+        {
+            busyTaskIds.Remove(id);
+        }
+    }
+
+    private bool IsBusy(int id) => busyTaskIds.Contains(id);
+
+    private sealed record CreateTaskRequest(string Title);
+
+    private sealed record ToggleTaskResponse(bool IsCompleted);
+}
