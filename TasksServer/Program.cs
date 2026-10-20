@@ -1,16 +1,21 @@
 using Microsoft.EntityFrameworkCore;
 using TasksServer.Data;
 using TasksServer.Components;
+using TasksServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
 builder.Services.AddDbContextFactory<TasksDbContext>(options =>
     options.UseSqlite(
         builder.Configuration.GetConnectionString("TasksDb")
         ?? "Data Source=tasks.db"));
+
+builder.Services.AddScoped<TaskService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

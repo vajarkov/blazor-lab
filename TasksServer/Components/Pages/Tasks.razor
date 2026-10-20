@@ -1,8 +1,8 @@
 
 @page "/tasks"
-@using Microsoft.EntityFrameworkCore
 @using TasksServer.Data
-@inject IDbContextFactory<TasksDbContext> DbFactory
+@using TasksServer.Services
+@inject TaskService TaskService
 
 <PageTitle>Список задач</PageTitle>
 
@@ -68,11 +68,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        tasks = await db.Tasks
-            .OrderBy(t => t.Id)
-            .ToListAsync();
+        tasks = await TaskService.GetAllAsync();
     }
 
     private async Task AddTask()
@@ -84,15 +80,7 @@ else
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        var task = new TaskItem
-        {
-            Title = title
-        };
-
-        db.Tasks.Add(task);
-        await db.SaveChangesAsync();
+        var task = await TaskService.AddAsync(title);
 
         tasks.Add(task);
         newTaskTitle = string.Empty;
@@ -100,32 +88,14 @@ else
 
     private async Task ToggleTask(TaskItem task)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var isCompleted = await TaskService.ToggleAsync(task.Id);
 
-        var taskFromDb = await db.Tasks.FindAsync(task.Id);
-
-        if (taskFromDb is null)
-        {
-            return;
-        }
-
-        taskFromDb.IsCompleted = !taskFromDb.IsCompleted;
-        await db.SaveChangesAsync();
-
-        task.IsCompleted = taskFromDb.IsCompleted;
+        task.IsCompleted = isCompleted;
     }
 
     private async Task DeleteTask(TaskItem task)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        var taskFromDb = await db.Tasks.FindAsync(task.Id);
-
-        if (taskFromDb is not null)
-        {
-            db.Tasks.Remove(taskFromDb);
-            await db.SaveChangesAsync();
-        }
+        await TaskService.DeleteAsync(task.Id);
 
         tasks.Remove(task);
     }
