@@ -1,7 +1,226 @@
-﻿@page "/"
+﻿
+@page "/"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@using System.Net.Http.Json
+@using TasksWebApp.Client.Models
+@inject HttpClient Http
 
-<PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<PageTitle>Задачи</PageTitle>
 
-Welcome to your new app.
+<div class="container py-4">
+    <h1 class="mb-4">Список задач</h1>
+
+    <form class="row g-2 mb-4"
+          @onsubmit="AddTaskAsync"
+          @onsubmit:preventDefault>
+        <div class="col">
+            <input class="form-control"
+                   @bind="newTaskTitle"
+                   @bind:event="oninput"
+                   placeholder="Название задачи" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary"
+                    type="submit"
+                    disabled="@isAdding">
+                @(isAdding ? "Добавление..." : "Добавить")
+            </button>
+        </div>
+    </form>
+
+    @if (isLoading)
+    {
+        <div class="text-secondary">
+            <span class="spinner-border spinner-border-sm me-2"
+                  role="status"></span>
+            Загрузка задач...
+        </div>
+    }
+    else if (tasks.Count == 0)
+    {
+        <div class="alert alert-light border">
+            Задач пока нет.
+        </div>
+    }
+
+    @if (errorMessage is not null)
+    {
+        <div class="alert alert-danger" role="alert">
+            @errorMessage
+        </div>
+    }
+
+    @if (tasks.Count > 0)
+    {
+        <ul class="list-group">
+            @foreach (var task in tasks)
+            {
+                <li @key="task.Id"
+                    class="list-group-item d-flex align-items-center justify-content-between gap-3">
+
+                    <label class="d-flex align-items-center gap-2 flex-grow-1">
+                        <input class="form-check-input mt-0"
+                               type="checkbox"
+                               checked="@task.IsCompleted"
+                               disabled="@busyTaskIds.Contains(task.Id)"
+                               @onchange="() => ToggleTaskAsync(task)" />
+
+                        <span class="@(task.IsCompleted
+                            ? "text-decoration-line-through text-secondary"
+                            : "")">
+                            @task.Title
+                        </span>
+                    </label>
+
+                    <button class="btn btn-outline-danger btn-sm"
+                            type="button"
+                            disabled="@busyTaskIds.Contains(task.Id)"
+                            @onclick="() => DeleteTaskAsync(task.Id)">
+                        Удалить
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+
+@code {
+    private List<TaskItem> tasks = [];
+    private string newTaskTitle = string.Empty;
+    private bool isLoading = true;
+    private bool isAdding;
+    private string? errorMessage;
+    private HashSet<int> busyTaskIds = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasksAsync();
+    }
+
+    private async Task LoadTasksAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            tasks = await Http.GetFromJsonAsync<List<TaskItem>>("api/tasks")
+                ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Не удалось загрузить задачи: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task AddTaskAsync()
+    {
+        var title = newTaskTitle.Trim();
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            errorMessage = "Введите название задачи.";
+            return;
+        }
+
+        if (isAdding)
+            return;
+
+        isAdding = true;
+        errorMessage = null;
+
+        try
+        {
+            using var response = await Http.PostAsJsonAsync(
+                "api/tasks",
+                new CreateTaskRequest(title));
+
+            response.EnsureSuccessStatusCode();
+
+            var task = await response.Content.ReadFromJsonAsync<TaskItem>();
+
+            if (task is not null)
+            {
+                tasks.Add(task);
+                newTaskTitle = string.Empty;
+            }
+            else
+            {
+                await LoadTasksAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Не удалось добавить задачу: {ex.Message}";
+        }
+        finally
+        {
+            isAdding = false;
+        }
+    }
+
+    private async Task ToggleTaskAsync(TaskItem task)
+    {
+        if (!busyTaskIds.Add(task.Id))
+            return;
+
+        errorMessage = null;
+
+        try
+        {
+            using var response = await Http.PutAsync(
+                $"api/tasks/{task.Id}/toggle",
+                content: null);
+
+            response.EnsureSuccessStatusCode();
+
+            var result = await response.Content
+                .ReadFromJsonAsync<ToggleTaskResponse>();
+
+            if (result is not null)
+                task.IsCompleted = result.IsCompleted;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Не удалось изменить статус задачи: {ex.Message}";
+        }
+        finally
+        {
+            busyTaskIds.Remove(task.Id);
+        }
+    }
+
+    private async Task DeleteTaskAsync(int id)
+    {
+        if (!busyTaskIds.Add(id))
+            return;
+
+        errorMessage = null;
+
+        try
+        {
+            using var response = await Http.DeleteAsync($"api/tasks/{id}");
+            response.EnsureSuccessStatusCode();
+
+            tasks.RemoveAll(task => task.Id == id);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Не удалось удалить задачу: {ex.Message}";
+        }
+        finally
+        {
+            busyTaskIds.Remove(id);
+        }
+    }
+
+    private record CreateTaskRequest(string Title);
+
+    private record ToggleTaskResponse(bool IsCompleted);
+}
