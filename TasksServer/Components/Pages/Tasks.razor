@@ -18,15 +18,22 @@
         <form @onsubmit="AddTask" @onsubmit:preventDefault>
             <div class="d-flex gap-2">
                 <input class="form-control"
-                       placeholder="Введите новую задачу..."
-                       @bind="newTaskTitle" />
+                    placeholder="Введите новую задачу..."
+                    @bind="newTaskTitle" />
 
                 <button class="btn btn-primary"
-                    type="submit"
-                    disabled="@isAdding">
+                        type="submit"
+                        disabled="@isAdding">
                     @(isAdding ? "Добавление..." : "Добавить")
                 </button>
             </div>
+
+            @if (!string.IsNullOrWhiteSpace(validationMessage))
+            {
+                <div class="text-danger mt-2" role="alert">
+                    @validationMessage
+                </div>
+            }
         </form>
     </div>
 </div>
@@ -85,6 +92,7 @@ else
     private string? errorMessage;
     private bool isLoading = true;
     private string? loadError;
+    private string? validationMessage;
     protected override async Task OnInitializedAsync()
     {
         try
@@ -128,9 +136,11 @@ else
 
         if (string.IsNullOrWhiteSpace(title))
         {
+            validationMessage = "Введите название задачи.";
             return;
         }
 
+        validationMessage = null;
         isAdding = true;
 
         try

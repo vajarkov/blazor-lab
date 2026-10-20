@@ -2,8 +2,19 @@ using Microsoft.EntityFrameworkCore;
 using TasksServer.Data;
 using TasksServer.Components;
 using TasksServer.Services;
+using TasksServer.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("TasksWasm", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5057")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -27,12 +38,52 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseCors("TasksWasm");
 
 app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+app.MapGet("/api/tasks", async (TaskService taskService) =>
+{
+    var tasks = await taskService.GetAllAsync();
+    return Results.Ok(tasks);
+});
 
+app.MapPost("/api/tasks", async (
+    CreateTaskRequest request,
+    TaskService taskService) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Title))
+    {
+        return Results.BadRequest("Название задачи обязательно.");
+    }
+
+    var task = await taskService.AddAsync(request.Title);
+
+    return Results.Created($"/api/tasks/{task.Id}", task);
+});
+
+app.MapPut("/api/tasks/{id:int}/toggle", async (
+    int id,
+    TaskService taskService) =>
+{
+    var isCompleted = await taskService.ToggleAsync(id);
+
+    if (isCompleted is null)
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Ok(new ToggleTaskResponse(isCompleted.Value));
+});
+
+app.MapDelete("/api/tasks/{id:int}", async (
+    int id,
+    TaskService taskService) =>
+{
+    await taskService.DeleteAsync(id);
+    return Results.NoContent();
+});
 app.Run();
