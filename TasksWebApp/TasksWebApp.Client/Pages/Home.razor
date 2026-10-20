@@ -1,8 +1,8 @@
-﻿
-@page "/"
-@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+﻿@page "/"
+@rendermode InteractiveWebAssembly
 @using System.Net.Http.Json
-@using TasksWebApp.Client.Models
+@using Tasks.Contracts
+
 @inject HttpClient Http
 
 
@@ -11,19 +11,12 @@
 <div class="container py-4">
     <h1 class="mb-4">Список задач</h1>
 
-    <form class="row g-2 mb-4"
-          @onsubmit="AddTaskAsync"
-          @onsubmit:preventDefault>
+    <form class="row g-2 mb-4" @onsubmit="AddTaskAsync" @onsubmit:preventDefault>
         <div class="col">
-            <input class="form-control"
-                   @bind="newTaskTitle"
-                   @bind:event="oninput"
-                   placeholder="Название задачи" />
+            <input class="form-control" @bind="newTaskTitle" @bind:event="oninput" placeholder="Название задачи" />
         </div>
         <div class="col-auto">
-            <button class="btn btn-primary"
-                    type="submit"
-                    disabled="@isAdding">
+            <button class="btn btn-primary" type="submit" disabled="@isAdding">
                 @(isAdding ? "Добавление..." : "Добавить")
             </button>
         </div>
@@ -32,8 +25,7 @@
     @if (isLoading)
     {
         <div class="text-secondary">
-            <span class="spinner-border spinner-border-sm me-2"
-                  role="status"></span>
+            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
             Загрузка задач...
         </div>
     }
@@ -56,26 +48,20 @@
         <ul class="list-group">
             @foreach (var task in tasks)
             {
-                <li @key="task.Id"
-                    class="list-group-item d-flex align-items-center justify-content-between gap-3">
+                <li @key="task.Id" class="list-group-item d-flex align-items-center justify-content-between gap-3">
 
                     <label class="d-flex align-items-center gap-2 flex-grow-1">
-                        <input class="form-check-input mt-0"
-                               type="checkbox"
-                               checked="@task.IsCompleted"
-                               disabled="@busyTaskIds.Contains(task.Id)"
-                               @onchange="() => ToggleTaskAsync(task)" />
+                        <input class="form-check-input mt-0" type="checkbox" checked="@task.IsCompleted"
+                               disabled="@busyTaskIds.Contains(task.Id)" @onchange="() => ToggleTaskAsync(task)" />
 
                         <span class="@(task.IsCompleted
-                            ? "text-decoration-line-through text-secondary"
-                            : "")">
+                              ? "text-decoration-line-through text-secondary"
+                              : "")">
                             @task.Title
                         </span>
                     </label>
 
-                    <button class="btn btn-outline-danger btn-sm"
-                            type="button"
-                            disabled="@busyTaskIds.Contains(task.Id)"
+                    <button class="btn btn-outline-danger btn-sm" type="button" disabled="@busyTaskIds.Contains(task.Id)"
                             @onclick="() => DeleteTaskAsync(task.Id)">
                         Удалить
                     </button>
@@ -87,7 +73,7 @@
 
 
 @code {
-    private List<TaskItem> tasks = [];
+    private List<TaskItemDto> tasks = [];
     private string newTaskTitle = string.Empty;
     private bool isLoading = true;
     private bool isAdding;
@@ -106,7 +92,7 @@
 
         try
         {
-            tasks = await Http.GetFromJsonAsync<List<TaskItem>>("api/tasks")
+            tasks = await Http.GetFromJsonAsync<List<TaskItemDto>>("api/tasks")
                 ?? [];
         }
         catch (Exception ex)
@@ -143,7 +129,7 @@
 
             response.EnsureSuccessStatusCode();
 
-            var task = await response.Content.ReadFromJsonAsync<TaskItem>();
+            var task = await response.Content.ReadFromJsonAsync<TaskItemDto>();
 
             if (task is not null)
             {
@@ -165,7 +151,7 @@
         }
     }
 
-    private async Task ToggleTaskAsync(TaskItem task)
+    private async Task ToggleTaskAsync(TaskItemDto task)
     {
         if (!busyTaskIds.Add(task.Id))
             return;
@@ -184,7 +170,18 @@
                 .ReadFromJsonAsync<ToggleTaskResponse>();
 
             if (result is not null)
-                task.IsCompleted = result.IsCompleted;
+            {
+                var index = tasks.FindIndex(t => t.Id == task.Id);
+
+                if (index >= 0)
+                {
+                    tasks[index] = task with
+                    {
+                        IsCompleted = result.IsCompleted
+                    };
+                }
+            }
+            
         }
         catch (Exception ex)
         {
@@ -220,7 +217,4 @@
         }
     }
 
-    private record CreateTaskRequest(string Title);
-
-    private record ToggleTaskResponse(bool IsCompleted);
 }

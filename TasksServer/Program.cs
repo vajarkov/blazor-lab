@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TasksServer.Data;
 using TasksServer.Components;
 using TasksServer.Services;
-using TasksServer.Contracts;
+using Tasks.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors(options =>
@@ -50,7 +50,13 @@ app.MapRazorComponents<App>()
 app.MapGet("/api/tasks", async (TaskService taskService) =>
 {
     var tasks = await taskService.GetAllAsync();
-    return Results.Ok(tasks);
+
+    var dtos = tasks.Select(task => new TaskItemDto(
+        task.Id,
+        task.Title,
+        task.IsCompleted));
+
+    return Results.Ok(dtos);
 });
 
 app.MapPost("/api/tasks", async (
@@ -64,7 +70,12 @@ app.MapPost("/api/tasks", async (
 
     var task = await taskService.AddAsync(request.Title);
 
-    return Results.Created($"/api/tasks/{task.Id}", task);
+    var dto = new TaskItemDto(
+        task.Id,
+        task.Title,
+        task.IsCompleted);
+
+    return Results.Created($"/api/tasks/{task.Id}", dto);
 });
 
 app.MapPut("/api/tasks/{id:int}/toggle", async (

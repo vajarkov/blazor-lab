@@ -3,7 +3,7 @@ using TasksWebApp.Data;
 using TasksWebApp.Client.Pages;
 using TasksWebApp.Components;
 using TasksWebApp.Services;
-using TasksWebApp.Contracts;
+using Tasks.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,7 +15,7 @@ builder.Services.AddDbContextFactory<TasksDbContext>(options =>
     options.UseSqlite(
         builder.Configuration.GetConnectionString("TasksDb")
         ?? "Data Source=tasks-webapp.db"));
-        
+
 builder.Services.AddScoped<TaskService>();
 
 builder.Services.AddScoped(_ => new HttpClient
@@ -50,7 +50,13 @@ app.MapRazorComponents<App>()
 app.MapGet("/api/tasks", async (TaskService service) =>
 {
     var tasks = await service.GetAllAsync();
-    return Results.Ok(tasks);
+
+    var dtos = tasks.Select(task => new TaskItemDto(
+        task.Id,
+        task.Title,
+        task.IsCompleted));
+
+    return Results.Ok(dtos);
 });
 
 app.MapPost("/api/tasks", async (
@@ -61,7 +67,13 @@ app.MapPost("/api/tasks", async (
         return Results.BadRequest("Название задачи обязательно.");
 
     var task = await service.AddAsync(request.Title);
-    return Results.Created($"/api/tasks/{task.Id}", task);
+
+    var dto = new TaskItemDto(
+        task.Id,
+        task.Title,
+        task.IsCompleted);
+
+    return Results.Created($"/api/tasks/{task.Id}", dto);
 });
 
 app.MapPut("/api/tasks/{id:int}/toggle", async (
