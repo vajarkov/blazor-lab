@@ -1,5 +1,8 @@
 
 @page "/tasks"
+@using Microsoft.EntityFrameworkCore
+@using TasksServer.Data
+@inject IDbContextFactory<TasksDbContext> DbFactory
 
 <PageTitle>Список задач</PageTitle>
 
@@ -60,11 +63,19 @@ else
 }
 
 @code {
-    private readonly List<TaskItem> tasks = [];
+    private List<TaskItem> tasks = [];
     private string newTaskTitle = string.Empty;
-    private int nextId = 1;
 
-    private void AddTask()
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        tasks = await db.Tasks
+            .OrderBy(t => t.Id)
+            .ToListAsync();
+    }
+
+    private async Task AddTask()
     {
         var title = newTaskTitle.Trim();
 
@@ -73,29 +84,49 @@ else
             return;
         }
 
-        tasks.Add(new TaskItem
-        {
-            Id = nextId++,
-            Title = title
-        });
+        await using var db = await DbFactory.CreateDbContextAsync();
 
+        var task = new TaskItem
+        {
+            Title = title
+        };
+
+        db.Tasks.Add(task);
+        await db.SaveChangesAsync();
+
+        tasks.Add(task);
         newTaskTitle = string.Empty;
     }
 
-    private void ToggleTask(TaskItem task)
+    private async Task ToggleTask(TaskItem task)
     {
-        task.IsCompleted = !task.IsCompleted;
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var taskFromDb = await db.Tasks.FindAsync(task.Id);
+
+        if (taskFromDb is null)
+        {
+            return;
+        }
+
+        taskFromDb.IsCompleted = !taskFromDb.IsCompleted;
+        await db.SaveChangesAsync();
+
+        task.IsCompleted = taskFromDb.IsCompleted;
     }
 
-    private void DeleteTask(TaskItem task)
+    private async Task DeleteTask(TaskItem task)
     {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var taskFromDb = await db.Tasks.FindAsync(task.Id);
+
+        if (taskFromDb is not null)
+        {
+            db.Tasks.Remove(taskFromDb);
+            await db.SaveChangesAsync();
+        }
+
         tasks.Remove(task);
-    }
-
-    private sealed class TaskItem
-    {
-        public int Id { get; init; }
-        public string Title { get; init; } = string.Empty;
-        public bool IsCompleted { get; set; }
     }
 }

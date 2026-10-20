@@ -8,3 +8,7 @@
 .env
 .env.*
 !.env.example
+# Local SQLite databases
+**/*.db
+**/*.db-shm
+**/*.db-wal
