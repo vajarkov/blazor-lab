@@ -5,7 +5,12 @@
 @inject TaskService TaskService
 
 <PageTitle>Список задач</PageTitle>
-
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @errorMessage
+    </div>
+}
 <h1 class="mb-4">Список задач</h1>
 
 <div class="card mb-4">
@@ -17,8 +22,9 @@
                        @bind="newTaskTitle" />
 
                 <button class="btn btn-primary"
-                        type="submit">
-                    Добавить
+                    type="submit"
+                    disabled="@isAdding">
+                    @(isAdding ? "Добавление..." : "Добавить")
                 </button>
             </div>
         </form>
@@ -65,12 +71,13 @@ else
 @code {
     private List<TaskItem> tasks = [];
     private string newTaskTitle = string.Empty;
-
+    private bool isAdding;
+    private string? errorMessage;
     protected override async Task OnInitializedAsync()
     {
         tasks = await TaskService.GetAllAsync();
     }
-
+/*
     private async Task AddTask()
     {
         var title = newTaskTitle.Trim();
@@ -85,7 +92,41 @@ else
         tasks.Add(task);
         newTaskTitle = string.Empty;
     }
+*/
 
+    private async Task AddTask()
+    {
+        if (isAdding)
+        {
+            return;
+        }
+
+        var title = newTaskTitle.Trim();
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return;
+        }
+
+        isAdding = true;
+
+        try
+        {
+            var task = await TaskService.AddAsync(title);
+
+            tasks.Add(task);
+            newTaskTitle = string.Empty;
+            errorMessage = null;
+        }
+        catch (Exception)
+        {
+            errorMessage = "Не удалось сохранить задачу. Попробуйте ещё раз.";
+        }
+        finally
+        {
+            isAdding = false;
+        }
+    }
     private async Task ToggleTask(TaskItem task)
     {
         var isCompleted = await TaskService.ToggleAsync(task.Id);
