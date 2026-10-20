@@ -97,3 +97,5 @@ app.MapDelete("/api/tasks/{id:int}", async (
 });
 
 app.Run();
+
+public partial class Program { }
