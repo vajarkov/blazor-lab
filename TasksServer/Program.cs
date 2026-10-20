@@ -10,7 +10,9 @@ builder.Services.AddCors(options =>
     options.AddPolicy("TasksWasm", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5057")
+            .WithOrigins(
+    "http://localhost:5057",
+    "http://localhost:5055")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
