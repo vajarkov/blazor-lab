@@ -30,7 +30,7 @@ public class TaskService(IDbContextFactory<TasksDbContext> dbFactory)
         return task;
     }
 
-    public async Task<bool> ToggleAsync(int id)
+    public async Task<bool?> ToggleAsync(int id)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
 
@@ -38,7 +38,7 @@ public class TaskService(IDbContextFactory<TasksDbContext> dbFactory)
 
         if (task is null)
         {
-            return false;
+            return null;
         }
 
         task.IsCompleted = !task.IsCompleted;
@@ -46,7 +46,6 @@ public class TaskService(IDbContextFactory<TasksDbContext> dbFactory)
 
         return task.IsCompleted;
     }
-
     public async Task DeleteAsync(int id)
     {
         await using var db = await dbFactory.CreateDbContextAsync();

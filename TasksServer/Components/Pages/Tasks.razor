@@ -36,7 +36,17 @@
     <span>Выполнено: @tasks.Count(t => t.IsCompleted)</span>
 </div>
 
-@if (tasks.Count == 0)
+@if (isLoading)
+{
+    <p>Загрузка задач...</p>
+}
+else if (loadError is not null)
+{
+    <div class="alert alert-danger" role="alert">
+        @loadError
+    </div>
+}
+else if (tasks.Count == 0)
 {
     <div class="alert alert-info">
         Пока задач нет. Добавь первую!
@@ -73,9 +83,22 @@ else
     private string newTaskTitle = string.Empty;
     private bool isAdding;
     private string? errorMessage;
+    private bool isLoading = true;
+    private string? loadError;
     protected override async Task OnInitializedAsync()
     {
-        tasks = await TaskService.GetAllAsync();
+        try
+        {
+            tasks = await TaskService.GetAllAsync();
+        }
+        catch (Exception)
+        {
+            loadError = "Не удалось загрузить список задач. Попробуйте обновить страницу.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 /*
     private async Task AddTask()
@@ -129,15 +152,37 @@ else
     }
     private async Task ToggleTask(TaskItem task)
     {
-        var isCompleted = await TaskService.ToggleAsync(task.Id);
+        errorMessage = null;
 
-        task.IsCompleted = isCompleted;
+        try
+        {
+            var isCompleted = await TaskService.ToggleAsync(task.Id);
+
+            if (isCompleted is null)
+            {
+                errorMessage = "Задача не найдена. Обновите страницу.";
+                return;
+            }
+
+            task.IsCompleted = isCompleted.Value;
+        }
+        catch (Exception)
+        {
+            errorMessage = "Не удалось изменить статус задачи. Попробуйте ещё раз.";
+        }
     }
-
     private async Task DeleteTask(TaskItem task)
     {
-        await TaskService.DeleteAsync(task.Id);
+        errorMessage = null;
 
-        tasks.Remove(task);
+        try
+        {
+            await TaskService.DeleteAsync(task.Id);
+            tasks.Remove(task);
+        }
+        catch (Exception)
+        {
+            errorMessage = "Не удалось удалить задачу. Попробуйте ещё раз.";
+        }
     }
 }
