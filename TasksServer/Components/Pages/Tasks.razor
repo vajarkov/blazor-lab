@@ -1,0 +1,101 @@
+
+@page "/tasks"
+
+<PageTitle>Список задач</PageTitle>
+
+<h1 class="mb-4">Список задач</h1>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form @onsubmit="AddTask" @onsubmit:preventDefault>
+            <div class="d-flex gap-2">
+                <input class="form-control"
+                       placeholder="Введите новую задачу..."
+                       @bind="newTaskTitle" />
+
+                <button class="btn btn-primary"
+                        type="submit">
+                    Добавить
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <span>Всего задач: @tasks.Count</span>
+    <span>Выполнено: @tasks.Count(t => t.IsCompleted)</span>
+</div>
+
+@if (tasks.Count == 0)
+{
+    <div class="alert alert-info">
+        Пока задач нет. Добавь первую!
+    </div>
+}
+else
+{
+    <ul class="list-group">
+        @foreach (var task in tasks)
+        {
+            <li @key="task.Id"
+                class="list-group-item d-flex align-items-center gap-3">
+
+                <input type="checkbox"
+                       class="form-check-input"
+                       checked="@task.IsCompleted"
+                       @onchange="() => ToggleTask(task)" />
+
+                <span class="flex-grow-1 @(task.IsCompleted ? "text-decoration-line-through text-secondary" : "")">
+                    @task.Title
+                </span>
+
+                <button class="btn btn-outline-danger btn-sm"
+                        @onclick="() => DeleteTask(task)">
+                    Удалить
+                </button>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private readonly List<TaskItem> tasks = [];
+    private string newTaskTitle = string.Empty;
+    private int nextId = 1;
+
+    private void AddTask()
+    {
+        var title = newTaskTitle.Trim();
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return;
+        }
+
+        tasks.Add(new TaskItem
+        {
+            Id = nextId++,
+            Title = title
+        });
+
+        newTaskTitle = string.Empty;
+    }
+
+    private void ToggleTask(TaskItem task)
+    {
+        task.IsCompleted = !task.IsCompleted;
+    }
+
+    private void DeleteTask(TaskItem task)
+    {
+        tasks.Remove(task);
+    }
+
+    private sealed class TaskItem
+    {
+        public int Id { get; init; }
+        public string Title { get; init; } = string.Empty;
+        public bool IsCompleted { get; set; }
+    }
+}
